@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<!--
+  hdfs-site.xml for the containerised single-node lab cluster.
+
+  This is a PSEUDO-DISTRIBUTED, SINGLE-DATANODE configuration:
+    * dfs.replication = 1  -> exactly ONE physical copy of every block.
+    * It is a development/demonstration cluster, NOT a resilient one.
+    * Verify real placement with:
+        hdfs fsck /saas-cloud -files -blocks -locations
+        hdfs dfsadmin -report
+-->
+<configuration>
+
+  <!-- WebHDFS is what the Cloud Controller talks to. Without this property
+       every call returns HTTP 403. -->
+  <property>
+    <name>dfs.webhdfs.enabled</name>
+    <value>true</value>
+  </property>
+
+  <!-- Single DataNode -> one replica. Do not claim fault tolerance. -->
+  <property>
+    <name>dfs.replication</name>
+    <value>1</value>
+  </property>
+
+  <!-- Bind the NameNode RPC/HTTP endpoints on all interfaces so the
+       controller container can reach them over the compose network. -->
+  <property>
+    <name>dfs.namenode.rpc-address</name>
+    <value>0.0.0.0:8020</value>
+  </property>
+  <property>
+    <name>dfs.namenode.http-address</name>
+    <value>0.0.0.0:9870</value>
+  </property>
+
+  <!-- Static directories inside the container; persisted by named volumes.
+       NOTE: everything under /hadoop must live on a volume because the
+       container runs as the unprivileged 'hadoop' user and cannot write to
+       its own root filesystem. See the VOLUME declarations in the Dockerfile
+       and the ownership fix in docker/init-volumes.sh. -->
+  <property>
+    <name>dfs.namenode.name.dir</name>
+    <value>file:///hadoop/dfs/name</value>
+  </property>
+  <property>
+    <name>dfs.datanode.data.dir</name>
+    <value>file:///hadoop/dfs/data</value>
+  </property>
+
+  <!-- Keep permissions meaningful (the controller creates 0750 dirs). -->
+  <property>
+    <name>dfs.permissions.enabled</name>
+    <value>true</value>
+  </property>
+
+  <!-- Bind DataNode transfer/HTTP ports on all interfaces. This matters for
+       the WebHDFS redirect: the Location header points the controller at the
+       DataNode host:port, which must be reachable from the controller. -->
+  <property>
+    <name>dfs.datanode.address</name>
+    <value>0.0.0.0:9866</value>
+  </property>
+  <property>
+    <name>dfs.datanode.http.address</name>
+    <value>0.0.0.0:9864</value>
+  </property>
+
+</configuration>

@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<!--
+  hdfs-site.xml template for the LAN SaaS Cloud Storage lab.
+
+  Copy this <configuration> block into $HADOOP_HOME/etc/hadoop/hdfs-site.xml
+  on EVERY node. The values below are the multi-machine example; the README
+  shows the single-machine variant.
+
+  The single most important property for this project is dfs.webhdfs.enabled.
+  Without it every call from the Cloud Controller fails with HTTP 403.
+-->
+<configuration>
+
+  <!-- ---- NameNode identity (multi-machine example) ---------------------- -->
+  <property>
+    <name>dfs.namenode.rpc-address</name>
+    <value>nn.lab.local:8020</value>
+  </property>
+  <property>
+    <name>dfs.namenode.http-address</name>
+    <value>nn.lab.local:9870</value>
+  </property>
+
+  <!-- ---- WebHDFS --------------------------------------------------------- -->
+  <property>
+    <name>dfs.webhdfs.enabled</name>
+    <value>true</value>
+  </property>
+
+  <!-- ---- Replication ----------------------------------------------------- -->
+  <!-- Do NOT claim fault tolerance from this number alone: replication only
+       helps when there are at least as many DataNodes as the factor.
+       A single-DataNode lab cluster physically stores ONE copy.
+       Verify actual block placement with:
+         hdfs fsck /saas-cloud/users/<uid>/<file> -files -blocks -locations  -->
+  <property>
+    <name>dfs.replication</name>
+    <value>1</value>
+  </property>
+
+  <!-- ---- Directory layout ------------------------------------------------ -->
+  <property>
+    <name>dfs.namenode.name.dir</name>
+    <value>file:///data/hadoop/hdfs/namenode</value>
+  </property>
+  <property>
+    <name>dfs.datanode.data.dir</name>
+    <value>file:///data/hadoop/hdfs/datanode</value>
+  </property>
+
+  <!-- ---- Permissions ----------------------------------------------------- -->
+  <property>
+    <name>dfs.permissions.enabled</name>
+    <value>true</value>
+  </property>
+
+  <!-- ---- DataNode transfer ports (reachable from the controller host) ---- -->
+  <property>
+    <name>dfs.datanode.address</name>
+    <value>0.0.0.0:9866</value>
+  </property>
+  <property>
+    <name>dfs.datanode.http.address</name>
+    <value>0.0.0.0:9864</value>
+  </property>
+  <property>
+    <name>dfs.datanode.ipc.address</name>
+    <value>0.0.0.0:9867</value>
+  </property>
+
+</configuration>

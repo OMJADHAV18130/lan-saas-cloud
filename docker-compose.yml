@@ -1,0 +1,155 @@
+# ---------------------------------------------------------------------------
+# LAN SaaS Cloud Storage - containerised lab stack
+#
+#   namenode   : HDFS NameNode + DataNode + WebHDFS  (Hadoop 3.4.1)
+#   controller : FastAPI Cloud Controller + built React SPA
+#
+# Start:   docker compose up -d --build
+# Logs:    docker compose logs -f controller
+# Stop:    docker compose down          (volumes are kept)
+# Reset:   docker compose down -v       (DESTROYS HDFS data and the database)
+# ---------------------------------------------------------------------------
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # One-shot service: prepare the named volumes IN PLACE and exit.
+  #
+  # Why this exists: Docker creates a named volume owned by root:root. Both
+  # containers run as unprivileged users (hadoop=1000, appuser=10001), so the
+  # first write would fail with "Permission denied". This service chowns the
+  # volume mount points and nothing else, then terminates.
+  # ---------------------------------------------------------------------------
+  volume-init:
+    image: alpine:3.20
+    container_name: lan-saas-volume-init
+    user: "0:0"
+    # -R is deliberately NOT used: it would be slow on a large existing
+    # DataNode directory. Only the mount points themselves need to be writable;
+    # Hadoop creates its own subdirectories afterwards.
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        mkdir -p /nn /dn /tmp /data
+        chown 1000:1000  /nn /dn
+        chmod 750        /nn /dn
+        chown 1000:1000  /tmp
+        chmod 1777       /tmp
+        chown 10001:10001 /data
+        chmod 750        /data
+        echo "[volume-init] ownership prepared"
+        ls -ld /nn /dn /tmp /data
+    volumes:
+      - hdfs-namenode-data:/nn
+      - hdfs-datanode-data:/dn
+      - hdfs-tmp:/tmp
+      - controller-data:/data
+    networks:
+      - cloudnet
+    restart: "no"
+
+  # ---------------- HDFS: NameNode + DataNode (single node) ----------------
+  namenode:
+    build:
+      context: ./cloud-controller/base-image
+      dockerfile: Dockerfile
+    image: lan-saas-hadoop:3.4.1
+    container_name: lan-saas-namenode
+    hostname: namenode
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+    environment:
+      HDFS_SERVICE_USER: saascloud
+    volumes:
+      - hdfs-namenode-data:/hadoop/dfs/name
+      - hdfs-datanode-data:/hadoop/dfs/data
+      - hdfs-tmp:/hadoop/tmp
+    networks:
+      - cloudnet
+    # The controller containers reach the cluster over the compose network.
+    # Ports are published on the host ONLY for administration / hdfs CLI use;
+    # never expose 9870/9864 to lab client PCs (see docs/lan-deployment.md).
+    ports:
+      - "127.0.0.1:9870:9870"   # WebHDFS + NameNode UI (localhost only)
+      - "127.0.0.1:8020:8020"   # NameNode RPC (localhost only)
+      - "127.0.0.1:9864:9864"   # DataNode HTTP (localhost only)
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS 'http://127.0.0.1:9870/webhdfs/v1/?op=LISTSTATUS&user.name=hadoop' >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 10s
+      start_period: 60s
+      retries: 5
+    restart: unless-stopped
+
+  # ---------------- Cloud Controller + React SPA ---------------------------
+  controller:
+    build:
+      context: .
+      dockerfile: cloud-controller/Dockerfile
+    image: lan-saas-controller:1.0.0
+    container_name: lan-saas-controller
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+      namenode:
+        condition: service_healthy
+    environment:
+      # --- application ---
+      ENVIRONMENT: production
+      APP_NAME: LAN SaaS Cloud Storage
+      # Single-origin deployment: the SPA is served by this container, so the
+      # browser origin is the controller URL itself. Add extra origins here if
+      # you also run a separate dev server.
+# Default is 8080 because 8000 is commonly already taken on a development
+# machine. Change it in .env (CONTROLLER_PORT=...) if 8080 is also busy.
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      STATIC_DIR: /app/static
+      # --- security (JWT_SECRET must be supplied, see .env.example) ---
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env before starting}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_EXPIRES_MINUTES: ${JWT_EXPIRES_MINUTES:-60}
+      # --- metadata database (on a volume, never inside the image) ---
+      DATABASE_URL: sqlite:////data/lan_saas.db
+      # --- uploads ---
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-10485760}
+      MAX_FILES_PER_USER: ${MAX_FILES_PER_USER:-500}
+      # --- authentication rate limiting ---
+      AUTH_RATE_LIMIT_ATTEMPTS: ${AUTH_RATE_LIMIT_ATTEMPTS:-10}
+      AUTH_RATE_LIMIT_WINDOW_SECONDS: ${AUTH_RATE_LIMIT_WINDOW_SECONDS:-60}
+      # --- HDFS / WebHDFS: service name, never an IP ---
+      HDFS_ADAPTER: webhdfs
+      HDFS_BASE_URL: http://namenode:9870
+      HDFS_SERVICE_USER: saascloud
+      HDFS_ROOT: /saas-cloud
+      HDFS_AUTH: simple
+      HDFS_TIMEOUT_SECONDS: ${HDFS_TIMEOUT_SECONDS:-15}
+      # Optional: enables live/dead DataNode counts in /api/admin/hdfs-status.
+      HDFS_JMX_URL: http://namenode:9870/jmx
+      # --- first admin bootstrap (only used while the users table is empty) ---
+      ADMIN_BOOTSTRAP_USERNAME: ${ADMIN_BOOTSTRAP_USERNAME:-}
+      ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-}
+    volumes:
+      - controller-data:/data
+    # MUST be on the same network as the NameNode, otherwise the DNS name
+    # "namenode" used in HDFS_BASE_URL does not resolve.
+    networks:
+      - cloudnet
+    ports:
+      # Reachable from the whole lab LAN - this is the only port clients need.
+      # Default is 8080 because 8000 is commonly already taken on a development
+      # machine. Change it in .env (CONTROLLER_PORT=...) if 8080 is also busy.
+      - "${CONTROLLER_PORT:-8080}:8000"
+    restart: unless-stopped
+
+networks:
+  cloudnet:
+    driver: bridge
+
+volumes:
+  hdfs-namenode-data:
+  hdfs-datanode-data:
+  hdfs-tmp:
+  controller-data:

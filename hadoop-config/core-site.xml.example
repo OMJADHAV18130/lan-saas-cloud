@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<!--
+  core-site.xml template for the LAN SaaS Cloud Storage lab.
+
+  Copy this <configuration> block into $HADOOP_HOME/etc/hadoop/core-site.xml
+  on EVERY node (NameNode and DataNodes), then adjust fs.defaultFS.
+
+  LAN host resolution rules:
+    * Single machine (pseudo-distributed): fs.defaultFS = hdfs://localhost:8020
+    * Multi machine: use ONE resolvable NameNode name on every machine, either
+      a /etc/hosts line (192.168.1.20  nn.lab.local  namenode) or internal DNS.
+      Do NOT hardcode the IP in the application - the controller reads its
+      endpoint from HDFS_BASE_URL in its .env file.
+    * The same name must resolve on every node, because WebHDFS redirects
+      point at DataNode addresses as well.
+-->
+<configuration>
+
+  <property>
+    <name>fs.defaultFS</name>
+    <value>hdfs://nn.lab.local:8020</value>
+  </property>
+
+  <property>
+    <name>hadoop.tmp.dir</name>
+    <value>/data/hadoop/tmp</value>
+  </property>
+
+  <property>
+    <name>hadoop.http.staticuser.user</name>
+    <value>hdfs</value>
+  </property>
+
+  <!-- Proxy-user entries for the controller's service identity (only needed
+       if you later enable doAs/proxyuser style access. The lab build simply
+       issues every WebHDFS request as the 'saascloud' user.) -->
+  <property>
+    <name>hadoop.proxyuser.saascloud.hosts</name>
+    <value>*</value>
+  </property>
+  <property>
+    <name>hadoop.proxyuser.saascloud.groups</name>
+    <value>*</value>
+  </property>
+
+</configuration>

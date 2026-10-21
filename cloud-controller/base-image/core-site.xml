@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<!--
+  core-site.xml for the containerised lab cluster.
+
+  fs.defaultFS intentionally uses the SERVICE NAME "namenode" (the compose
+  service / DNS name), not an IP address and not localhost. Two reasons:
+
+    1. No machine IP is hardcoded anywhere in the project.
+    2. WebHDFS returns 307 redirects whose Location header contains a DataNode
+       address. Inside the cluster that address is the compose network name,
+       so the controller can follow the redirect without any extra DNS setup.
+-->
+<configuration>
+
+  <property>
+    <name>fs.defaultFS</name>
+    <value>hdfs://namenode:8020</value>
+  </property>
+
+  <property>
+    <name>hadoop.tmp.dir</name>
+    <value>/hadoop/tmp</value>
+  </property>
+
+  <property>
+    <name>hadoop.http.staticuser.user</name>
+    <value>hadoop</value>
+  </property>
+
+  <!-- Allow the controller's service identity to act through WebHDFS.
+       Filled in explicitly rather than left to defaults. -->
+  <property>
+    <name>hadoop.proxyuser.saascloud.hosts</name>
+    <value>*</value>
+  </property>
+  <property>
+    <name>hadoop.proxyuser.saascloud.groups</name>
+    <value>*</value>
+  </property>
+
+</configuration>

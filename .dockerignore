@@ -1,0 +1,22 @@
+# Keep Docker build context small - never send node_modules / venvs / DBs.
+# (Docker automatically uses a .dockerignore file placed next to the Dockerfile
+#  as well as one in the build context root; see docker-compose.yml which sets
+#  the context to the repository root, so the root .dockerignore applies.)
+
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.venv
+**/venv
+**/dist
+**/.env
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/mock_hdfs_data
+.git
+.gitignore
+docs
+scripts
+README.md
